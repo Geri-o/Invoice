@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fatura — invoice studio</title>
+<style>
+  :root{
+    --desk:#15130e;
+    --desk-2:#1d1a13;
+    --panel-ink:#efe8d8;
+    --panel-dim:#9b937f;
+    --accent:#d23b2e;
+    --accent-deep:#a92a20;
+    /* sheet (matches the invoice-generator.com PDF) */
+    --ink:#333;
+    --label:#9a9a9a;
+    --bar:#424242;
+    --shade:#f3f3f3;
+    --sans:Helvetica,Arial,'Helvetica Neue',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:var(--sans);
+    background:var(--desk);
+    color:var(--panel-ink);
+    display:flex;
+    min-height:100vh;
+  }
+
+  /* ───────────────────────── side panel ───────────────────────── */
+  .panel{
+    position:sticky;top:0;align-self:flex-start;
+    width:280px;flex:0 0 280px;min-height:100vh;max-height:100vh;overflow-y:auto;z-index:2;
+    padding:36px 28px 28px;
+    display:flex;flex-direction:column;gap:22px;
+    border-right:1px solid rgba(239,232,216,.08);
+  }
+  .brand h1{
+    font-size:30px;line-height:1;color:var(--panel-ink);font-weight:700;
+  }
+  .brand h1 .dot{color:var(--accent)}
+  .brand p{
+    margin-top:10px;font-size:12.5px;line-height:1.55;color:var(--panel-dim);
+    max-width:24ch;
+  }
+  .btn{
+    border:0;border-radius:10px;padding:13px 16px;cursor:pointer;
+    font:700 14px var(--sans);width:100%;
+    background:var(--accent);color:#fff7f0;
+    transition:transform .15s,background .2s;
+  }
+  .btn:hover{background:var(--accent-deep)}
+  .btn:active{transform:translateY(1px)}
+  .panel .foot{
+    margin-top:auto;font-size:11px;line-height:1.6;color:#6b6452;
+  }
+  .panel .foot b{color:var(--panel-dim);font-weight:500}
+
+  /* ───────────────────────── desk + sheet ───────────────────────── */
+  .desk{
+    flex:1;z-index:1;display:flex;justify-content:center;
+    padding:44px 36px 80px;
+  }
+  .sheet{
+    width:860px;max-width:100%;background:#fff;color:var(--ink);
+    position:relative;padding:48px 56px 56px;height:max-content;
+    font-size:13px;
+    box-shadow:0 30px 70px -20px rgba(0,0,0,.65),0 4px 16px rgba(0,0,0,.4);
+  }
+
+  /* editable fields melt into the paper */
+  .sheet input,.sheet textarea{
+    font:inherit;color:inherit;background:transparent;border:0;width:100%;
+    border-radius:3px;padding:2px 6px;margin-left:-6px;resize:none;overflow:hidden;
+    transition:background .15s,box-shadow .15s;
+  }
+  .sheet input:hover,.sheet textarea:hover{background:#f5f5f5}
+  .sheet input:focus,.sheet textarea:focus{
+    outline:none;background:#f5f5f5;box-shadow:0 0 0 1.5px #bbb;
+  }
+  .sheet ::placeholder{color:#c0c0c0}
+  input[type=number]{-moz-appearance:textfield}
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+  /* head: INVOICE right-aligned */
+  .head{display:flex;justify-content:flex-end}
+  .masthead{font-size:36px;color:var(--ink);letter-spacing:.5px;line-height:1}
+
+  /* parties (left) + meta (right) */
+  .band{display:flex;justify-content:space-between;align-items:flex-end;gap:32px;margin-top:54px}
+  .parties{display:flex;gap:36px;flex:1;min-width:0}
+  .party{flex:1;min-width:0}
+  .cap{font-size:13px;color:var(--label);margin-bottom:6px;display:block}
+  .party textarea{font-size:13px;line-height:1.6}
+  .meta{width:320px;flex:0 0 320px;display:flex;flex-direction:column;gap:8px}
+  .meta-row{display:grid;grid-template-columns:1fr 120px;align-items:center;gap:12px;padding:0 12px}
+  .meta-row .k{font-size:13px;color:var(--label);text-align:right}
+  .meta-row input{text-align:right;font-size:13px}
+  .meta-row.balance{
+    background:var(--shade);padding:9px 12px;margin-top:4px;
+  }
+  .meta-row.balance .k{color:var(--ink);font-weight:700}
+  .meta-row.balance .v{font-weight:700;text-align:right;font-size:14px}
+
+  /* items table */
+  .items{margin-top:48px}
+  .items-head,.item-row{
+    display:grid;grid-template-columns:1fr 100px 110px 120px;gap:12px;align-items:start;
+  }
+  .items-head{
+    background:var(--bar);color:#fff;border-radius:4px;
+    padding:9px 14px;font-size:13px;
+  }
+  .items-head span:not(:first-child){text-align:right}
+  .item-row{padding:9px 14px;position:relative}
+  .item-row .desc{font-weight:700;font-size:13px;line-height:1.55}
+  .item-row input.qty,.item-row input.rate{
+    text-align:right;font-size:13px;margin-top:1px;
+  }
+  .item-row .amt{
+    text-align:right;font-size:13px;padding:3px 6px 0 0;white-space:nowrap;
+  }
+  .row-x{
+    position:absolute;left:-34px;top:8px;
+    width:24px;height:24px;border-radius:50%;border:1px solid #ddd;
+    background:#fff;color:#999;cursor:pointer;
+    font:400 13px/22px var(--sans);opacity:0;transition:opacity .15s,color .15s,border-color .15s;
+  }
+  .item-row:hover .row-x{opacity:1}
+  .row-x:hover{color:var(--accent);border-color:var(--accent)}
+  .add-row{
+    margin-top:10px;width:100%;padding:10px;border:1.5px dashed #ddd;
+    border-radius:4px;background:transparent;color:#999;cursor:pointer;
+    font:400 13px var(--sans);transition:color .15s,border-color .15s;
+  }
+  .add-row:hover{color:var(--accent);border-color:var(--accent)}
+
+  /* totals */
+  .totals{
+    margin-top:34px;margin-left:auto;width:300px;
+    display:flex;flex-direction:column;gap:10px;padding-right:14px;
+  }
+  .t-row{display:grid;grid-template-columns:1fr 120px;gap:12px;align-items:center}
+  .t-row .k{font-size:13px;color:var(--label);text-align:right}
+  .t-row .v{font-size:13px;text-align:right}
+  .t-row.grand .k{color:var(--ink);font-size:15px;font-weight:700}
+  .t-row.grand .v{font-weight:700;font-size:17px}
+
+  /* notes */
+  .notes{margin-top:64px;max-width:520px}
+  .notes textarea{font-size:13px;line-height:1.6}
+
+  /* ───────────────────────── responsive (screen only — print pages
+     are narrower than the breakpoint and must keep the desktop layout) */
+  @media screen and (max-width:1080px){
+    body{flex-direction:column}
+    .panel{position:static;width:100%;flex:none;min-height:0;border-right:0;
+      border-bottom:1px solid rgba(239,232,216,.08);padding:24px 20px}
+    .panel .foot{display:none}
+    .desk{padding:28px 14px 60px}
+    .sheet{padding:30px 22px 40px}
+    .band{flex-direction:column}
+    .parties{gap:20px}
+    .meta{width:100%;flex:none;margin-top:0}
+  }
+
+  /* ───────────────────────── print ───────────────────────── */
+  @media print{
+    /* zero page margin = the browser has no strip to draw its own
+       header (time/title) and footer (file path) in; the sheet's
+       padding below provides the visual margins instead */
+    @page{margin:0}
+    body{background:#fff;display:block}
+    .panel,.row-x,.add-row{display:none !important}
+    .desk{display:block;padding:0}
+    .sheet{
+      /* natural 1:1 size — the desc column flexes, so no scaling tricks
+         that print engines may ignore */
+      width:auto;max-width:none;margin:0;
+      box-shadow:none;padding:14mm 14mm 16mm;
+      -webkit-print-color-adjust:exact;print-color-adjust:exact;
+    }
+    .sheet ::placeholder{color:transparent}
+    .sheet input,.sheet textarea{background:transparent !important;box-shadow:none !important}
+    input[type=date]::-webkit-calendar-picker-indicator{display:none}
+  }
+</style>
+</head>
+<body>
+
+<aside class="panel">
+  <div class="brand">
+    <h1>Fatura<span class="dot">.</span></h1>
+    <p>Type straight onto the invoice. Everything autosaves on this device.</p>
+  </div>
+
+  <div class="ctl">
+    <button class="btn" id="printBtn" type="button">Download PDF</button>
+  </div>
+
+  <div class="foot">
+    <b>Tip</b> — edit anything by typing straight on the invoice. Then
+    <b>Download PDF</b> and choose "Save as PDF" — the filename is already set
+    to your name + month. Everything is remembered on this device.
+  </div>
+</aside>
+
+<main class="desk">
+  <div class="sheet" id="sheet">
+
+    <div class="head">
+      <div class="masthead">INVOICE</div>
+    </div>
+
+    <div class="band">
+      <div class="parties">
+        <div class="party">
+          <span class="cap">Bill To:</span>
+          <textarea id="billTo" rows="2" placeholder="Who is this for?"></textarea>
+        </div>
+        <div class="party">
+          <span class="cap">Ship To:</span>
+          <textarea id="shipTo" rows="2" placeholder="(optional)"></textarea>
+        </div>
+      </div>
+      <div class="meta">
+        <div class="meta-row"><span class="k">Date:</span><input type="date" id="date"></div>
+        <div class="meta-row"><span class="k">Due Date:</span><input type="date" id="due"></div>
+        <div class="meta-row balance">
+          <span class="k">Balance Due:</span>
+          <span class="v" id="balanceChip">$0.00</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="items">
+      <div class="items-head">
+        <span>Item</span><span>Quantity</span><span>Rate</span><span>Amount</span>
+      </div>
+      <div id="rows"></div>
+      <button class="add-row" id="addRow" type="button">+ Add line item</button>
+    </div>
+
+    <div class="totals">
+      <div class="t-row grand"><span class="k">Total:</span><span class="v" id="total"></span></div>
+    </div>
+
+    <div class="notes">
+      <span class="cap">Notes:</span>
+      <textarea id="notes" rows="2" placeholder="Payment details — wallet where the amount is sent…"></textarea>
+    </div>
+
+  </div>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  const LS_KEY = 'fatura.v1';
+  const $ = id => document.getElementById(id);
+
+  /* worked example — what staff see on first open */
+  const EXAMPLE = {
+    date: '2026-06-10',
+    due: '2026-06-10',
+    billTo: 'Youngzsoft\nYaokun Zhu\nsupport@youngzsoft.net\n86731855237391',
+    shipTo: 'Geri',
+    items: [
+      { desc: 'Salary for the month of June\nWorking days 27\nAbsent days 2', qty: 400, rate: 1 },
+      { desc: 'Reports', qty: 141, rate: 2 },
+      { desc: 'Penalty', qty: 10,  rate: -1 },
+    ],
+    notes: 'Paypal - gerisejko@hotmail.com\nBinance trc20- TANAemhCcJHEBhZfykGQVpDAVx45sds72R',
+  };
+
+  let state;
+  try { state = JSON.parse(localStorage.getItem(LS_KEY)) || structuredClone(EXAMPLE); }
+  catch { state = structuredClone(EXAMPLE); }
+
+  const save = () => localStorage.setItem(LS_KEY, JSON.stringify(state));
+
+  const fmt = n => {
+    const sign = n < 0 ? '-' : '';
+    const num = Math.abs(n).toLocaleString('en-US',
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return sign + '$' + num;
+  };
+
+  const autosize = el => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; };
+
+  /* ── line items ────────────────────────────────────────────── */
+  const rowsEl = $('rows');
+
+  function buildRow(item, i) {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.innerHTML = `
+      <textarea class="desc" rows="1" placeholder="Description of work…"></textarea>
+      <input class="qty"  type="number" step="any">
+      <input class="rate" type="number" step="any">
+      <span class="amt"></span>
+      <button class="row-x" type="button" title="Remove line">×</button>`;
+    const desc = row.querySelector('.desc');
+    const qty  = row.querySelector('.qty');
+    const rate = row.querySelector('.rate');
+    desc.value = item.desc;
+    qty.value  = item.qty;
+    rate.value = item.rate;
+    desc.addEventListener('input', () => { state.items[i].desc = desc.value; autosize(desc); save(); });
+    qty .addEventListener('input', () => { state.items[i].qty  = +qty.value  || 0; recalc(); });
+    rate.addEventListener('input', () => { state.items[i].rate = +rate.value || 0; recalc(); });
+    row.querySelector('.row-x').addEventListener('click', () => {
+      state.items.splice(i, 1);
+      if (!state.items.length) state.items.push({ desc: '', qty: 1, rate: 0 });
+      renderRows(); recalc();
+    });
+    return row;
+  }
+
+  function renderRows() {
+    rowsEl.replaceChildren(...state.items.map(buildRow));
+    rowsEl.querySelectorAll('.desc').forEach(autosize);
+  }
+
+  $('addRow').addEventListener('click', () => {
+    state.items.push({ desc: '', qty: 1, rate: 0 });
+    renderRows(); recalc();
+    rowsEl.lastElementChild.querySelector('.desc').focus();
+  });
+
+  /* ── totals ────────────────────────────────────────────────── */
+  function recalc() {
+    state.items.forEach((it, i) => {
+      rowsEl.children[i].querySelector('.amt').textContent = fmt(it.qty * it.rate);
+    });
+    const total = state.items.reduce((s, it) => s + it.qty * it.rate, 0);
+    $('total').textContent    = fmt(total);
+    $('balanceChip').textContent = fmt(total);
+    save();
+  }
+
+  /* ── simple fields ─────────────────────────────────────────── */
+  const FIELDS = ['date', 'due', 'billTo', 'shipTo', 'notes'];
+  FIELDS.forEach(k => {
+    const el = $(k);
+    el.addEventListener('input', () => {
+      state[k] = el.value;
+      if (el.tagName === 'TEXTAREA') autosize(el);
+      save();
+    });
+  });
+
+  /* ── download ──────────────────────────────────────────────── */
+  const MONTHS = ['January','February','March','April','May','June',
+                  'July','August','September','October','November','December'];
+  const MONTH_RE = new RegExp('\\b(' + MONTHS.join('|') + ')\\b', 'i');
+
+  $('printBtn').addEventListener('click', () => {
+    /* the browser uses the page title as the suggested PDF filename */
+    const name = (state.shipTo || '').split('\n')[0].trim() || 'Invoice';
+    const inMonth = (state.items.map(it => it.desc).join('\n').match(MONTH_RE) || [])[1];
+    const dateMonth = MONTHS[new Date((state.date || '') + 'T00:00').getMonth()];
+    document.title = (name + ' ' + (inMonth || dateMonth || '')).trim();
+    window.print();
+  });
+  window.addEventListener('afterprint', () => { document.title = 'Fatura — invoice studio'; });
+  window.addEventListener('beforeprint', () =>
+    document.querySelectorAll('.sheet textarea').forEach(autosize));
+
+  /* ── hydrate everything from state ─────────────────────────── */
+  function hydrate() {
+    FIELDS.forEach(k => { $(k).value = state[k] ?? ''; });
+    renderRows(); recalc();
+    document.querySelectorAll('.sheet textarea').forEach(autosize);
+  }
+  hydrate();
+})();
+</script>
+</body>
+</html>
